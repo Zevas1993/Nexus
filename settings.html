@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Nexus AI Assistant{% endblock %}
+
+{% block content %}
+  <h1 class="mb-4">Settings</h1>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">User Settings</div>
+        <div class="card-body">
+          <form id="user-settings-form">
+            <div class="mb-3">
+              <label for="display-name" class="form-label">Display Name</label>
+              <input type="text" class="form-control" id="display-name" placeholder="Your display name">
+            </div>
+            <div class="mb-3">
+              <label for="email-notifications" class="form-check-label">
+                <input type="checkbox" class="form-check-input" id="email-notifications">
+                Enable email notifications
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Save User Settings</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">AI Assistant Settings</div>
+        <div class="card-body">
+          <form id="ai-settings-form">
+            <div class="mb-3">
+              <label for="response-length" class="form-label">Response Length</label>
+              <select class="form-select" id="response-length">
+                <option value="concise">Concise</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="detailed">Detailed</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="voice-settings" class="form-label">Voice Settings</label>
+              <select class="form-select" id="voice-settings">
+                <option value="default" selected>Default Voice</option>
+                <option value="voice1">Voice 1</option>
+                <option value="voice2">Voice 2</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Save AI Settings</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">System Information</div>
+    <div class="card-body">
+      <div id="system-info">Loading system information...</div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">Data Management</div>
+    <div class="card-body">
+      <button class="btn btn-warning" onclick="clearAllSessions()">Clear All Sessions</button>
+      <button class="btn btn-danger" onclick="deleteAccount()">Delete Account</button>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    // Load system information
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/v1/status')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            displaySystemInfo(data);
+          } else {
+            document.getElementById('system-info').textContent = 'Error loading system information: ' + data.message;
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching system info:', err);
+          document.getElementById('system-info').textContent = 'Error loading system information. Please try again.';
+        });
+    });
+
+    // Display system information
+    function displaySystemInfo(data) {
+      const systemInfo = document.getElementById('system-info');
+      const stats = data.system_stats;
+      const health = data.health;
+      
+      let html = `
+        <div class="row">
+          <div class="col-md-4">
+            <h5>CPU</h5>
+            <div class="progress mb-2">
+              <div class="progress-bar ${getHealthClass(health.checks.cpu.status)}" 
+                   role="progressbar" 
+                   style="width: ${stats.cpu.percent}%" 
+                   aria-valuenow="${stats.cpu.percent}" 
+                   aria-valuemin="0" 
+                   aria-valuemax="100">
+                ${stats.cpu.percent.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-md-4">
+            <h5>Memory</h5>
+            <div class="progress mb-2">
+              <div class="progress-bar ${getHealthClass(health.checks.memory.status)}" 
+                   role="progressbar" 
+                   style="width: ${stats.memory.percent}%" 
+                   aria-valuenow="${stats.memory.percent}" 
+                   aria-valuemin="0" 
+                   aria-valuemax="100">
+                ${stats.memory.percent.toFixed(1)}%
+              </div>
+            </div>
+            <p>Used: ${formatBytes(stats.memory.used)} / ${formatBytes(stats.memory.total)}</p>
+          </div>
+          
+          <div class="col-md-4">
+            <h5>Disk</h5>
+            <div class="progress mb-2">
+              <div class="progress-bar ${getHealthClass(health.checks.disk.status)}" 
+                   role="progressbar" 
+                   style="width: ${stats.disk.percent}%" 
+                   aria-valuenow="${stats.disk.percent}" 
+                   aria-valuemin="0" 
+                   aria-valuemax="100">
+                ${stats.disk.percent.toFixed(1)}%
+              </div>
+            </div>
+            <p>Used: ${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)}</p>
+          </div>
+        </div>
+      `;
+      
+      systemInfo.innerHTML = html;
+    }
+
+    // Get health class for progress bar
+    function getHealthClass(status) {
+      return status === 'healthy' ? 'bg-success' : 'bg-warning';
+    }
+
+    // Format bytes to human-readable format
+    function formatBytes(bytes, decimals = 2) {
+      if (bytes === 0) return '0 Bytes';
+      
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+      
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    // Handle user settings form submission
+    document.getElementById('user-settings-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const displayName = document.getElementById('display-name').value;
+      const emailNotifications = document.getElementById('email-notifications').checked;
+      
+      // Save settings (this is a placeholder - would need a real API endpoint)
+      alert('User settings saved!');
+    });
+
+    // Handle AI settings form submission
+    document.getElementById('ai-settings-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const responseLength = document.getElementById('response-length').value;
+      const voiceSettings = document.getElementById('voice-settings').value;
+      
+      // Save settings (this is a placeholder - would need a real API endpoint)
+      alert('AI settings saved!');
+    });
+
+    // Clear all sessions
+    function clearAllSessions() {
+      if (confirm('Are you sure you want to clear all your sessions? This action cannot be undone.')) {
+        // This is a placeholder - would need a real API endpoint
+        alert('All sessions cleared!');
+      }
+    }
+
+    // Delete account
+    function deleteAccount() {
+      if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+        if (confirm('FINAL WARNING: All your data will be permanently deleted. Continue?')) {
+          // This is a placeholder - would need a real API endpoint
+          alert('Account deletion initiated. You will be logged out.');
+          window.location.href = '/';
+        }
+      }
+    }
+  </script>
+{% endblock %}

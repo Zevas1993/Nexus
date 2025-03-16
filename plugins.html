@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Plugins - Nexus AI Assistant{% endblock %}
+
+{% block content %}
+  <h1 class="mb-4">Available Plugins</h1>
+
+  <div class="row" id="plugins-container">
+    <div class="col-12">
+      <div class="alert alert-info">
+        Loading plugins...
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    // Fetch and display plugins
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/v1/plugins')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            displayPlugins(data.plugins);
+          } else {
+            showError('Error loading plugins: ' + data.message);
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching plugins:', err);
+          showError('Error loading plugins. Please try again.');
+        });
+    });
+
+    // Display plugins in the container
+    function displayPlugins(plugins) {
+      const container = document.getElementById('plugins-container');
+      
+      if (!plugins || plugins.length === 0) {
+        container.innerHTML = `
+          <div class="col-12">
+            <div class="alert alert-info">
+              No plugins available. Check back later!
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      let html = '';
+      
+      plugins.forEach(plugin => {
+        html += `
+          <div class="col-md-4 mb-4">
+            <div class="card h-100">
+              <div class="card-body">
+                <h5 class="card-title">${plugin.name}</h5>
+                <p class="card-text">${plugin.description}</p>
+                <p class="card-text"><small class="text-muted">Example: "${plugin.default_prompt}"</small></p>
+              </div>
+              <div class="card-footer">
+                <button class="btn btn-primary" onclick="usePlugin('${plugin.name}')">Use Plugin</button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    }
+
+    // Show error message
+    function showError(message) {
+      const container = document.getElementById('plugins-container');
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-danger">
+            ${message}
+          </div>
+        </div>
+      `;
+    }
+
+    // Use plugin (redirect to chat with plugin prompt)
+    function usePlugin(pluginName) {
+      // Fetch plugin details
+      fetch('/api/v1/plugins')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            const plugin = data.plugins.find(p => p.name === pluginName);
+            if (plugin) {
+              // Create a new session with the plugin name
+              fetch('/api/v1/session', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ title: `${pluginName} Session` })
+              })
+              .then(response => response.json())
+              .then(sessionData => {
+                if (sessionData.status === 'success') {
+                  // Redirect to the session page
+                  window.location.href = `/session/${sessionData.session.id}?prompt=${encodeURIComponent(plugin.default_prompt)}`;
+                } else {
+                  alert('Error creating session: ' + sessionData.message);
+                }
+              });
+            }
+          }
+        });
+    }
+  </script>
+{% endblock %}
