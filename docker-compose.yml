@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Main Nexus AI Assistant application
+  nexus:
+    build: .
+    container_name: nexus-ai
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - nexus-network
+
+  # Redis cache service
+  redis:
+    image: redis:alpine
+    container_name: nexus-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - nexus-network
+
+  # Database service (PostgreSQL)
+  db:
+    image: postgres:13-alpine
+    container_name: nexus-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-nexus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nexuspassword}
+      POSTGRES_DB: ${DB_NAME:-nexus}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - nexus-network
+
+  # Adminer for database management (optional)
+  adminer:
+    image: adminer
+    container_name: nexus-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - nexus-network
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  nexus-network:
+    driver: bridge

@@ -1,0 +1,74 @@
+body {
+    background-color: #f8f9fa;
+    font-family: Arial, sans-serif;
+}
+
+#chat-box {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.user-message {
+    background-color: #e9ecef;
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 5px;
+    text-align: right;
+}
+
+.assistant-message {
+    background-color: #d4edda;
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 5px;
+    text-align: left;
+}
+
+#monitor-box {
+    background-color: #000;
+    color: #0f0;
+    font-family: monospace;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.monitor-event {
+    margin-bottom: 5px;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.monitor-event.fade-in {
+    opacity: 1;
+}
+
+.btn-secondary {
+    position: relative;
+}
+
+.btn-secondary:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.btn-success {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+}
+
+.btn-danger {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+}

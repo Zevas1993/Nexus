@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Nexus AI Assistant{% endblock %}
+
+{% block content %}
+  <h1 class="text-center mb-4">Nexus AI Assistant</h1>
+
+  {% if not logged_in %}
+    <!-- Google Sign-In when user is not logged in -->
+    <div class="text-center mb-4">
+      <div id="g_id_onload"
+           data-client_id="{{ config.GOOGLE_CLIENT_ID }}"
+           data-callback="handleCredentialResponse"
+           data-auto_prompt="true">
+      </div>
+      <div class="g_id_signin" data-type="standard" data-size="large"></div>
+    </div>
+  {% else %}
+    <!-- User is logged in -->
+    <div class="text-center mb-4">
+      <p>Welcome, {{ session['user_email'] }}!</p>
+      <p>Current Session: <span id="current-title">{{ current_title }}</span></p>
+      <div class="input-group mb-2" style="max-width: 300px; margin: auto;">
+        <input type="text" id="session-title-input" class="form-control" placeholder="Set session title">
+        <button class="btn btn-outline-secondary" onclick="setSessionTitle()">Set</button>
+      </div>
+      <select id="session-title-select" class="form-select mb-2" style="max-width: 300px; margin: auto;">
+        <option value="">Select a session to review</option>
+      </select>
+      <button class="btn btn-info" onclick="reviewSessions()">Review Selected Sessions</button>
+      <form action="/logout" method="POST" class="mt-2">
+        <button type="submit" class="btn btn-danger">Sign Out</button>
+      </form>
+    </div>
+    
+    <!-- System Status -->
+    <div id="status" class="alert alert-info">
+      <p>System Status: <span id="cpu">0</span>% CPU | <span id="ram">0</span>% RAM | <span id="gpu">0</span>% GPU</p>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mb-4">
+      <h3>Quick Actions</h3>
+      <div id="plugin-buttons" class="btn-group" role="group"></div>
+    </div>
+
+    <!-- Chat Card -->
+    <div class="card">
+      <div class="card-header">Chat with Nexus</div>
+      <div class="card-body" id="chat-box" style="height: 400px; overflow-y: auto;"></div>
+      <div class="card-footer">
+        <form id="chat-form" class="input-group">
+          <input type="text" id="user-input" class="form-control" placeholder="Ask Nexus anything..." required>
+          <button type="submit" class="btn btn-primary">Send</button>
+          <button type="button" class="btn btn-secondary" onclick="listen()">🎤</button>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Monitor Card -->
+    <div class="card mt-4">
+      <div class="card-header">Monitor</div>
+      <div class="card-body" id="monitor-box" style="height: 200px; overflow-y: auto;"></div>
+    </div>
+
+    <!-- Available Plugins -->
+    <div class="mt-4">
+      <h3>Available Plugins</h3>
+      <ul id="plugin-list" class="list-group"></ul>
+    </div>
+
+    <!-- Plugin Modal -->
+    <div class="modal fade" id="pluginModal" tabindex="-1" aria-labelledby="pluginModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="pluginModalLabel">Plugin Action</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="pluginModalBody"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="pluginModalSubmit">Run</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    function handleCredentialResponse(response) {
+      fetch('/auth/google/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id_token=' + response.credential
+      }).then(resp => resp.json()).then(data => {
+        if (data.status === 'success') window.location.reload();
+        else alert('Login failed: ' + data.message);
+      });
+    }
+
+    {% if logged_in %}
+    async function setSessionTitle() {
+      const title = document.getElementById('session-title-input').value.trim();
+      if (!title) return;
+      const response = await fetch('/api/v1/set_session_title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title })
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        document.getElementById('current-title').textContent = title;
+        document.getElementById('session-title-input').value = '';
+        updateSessionTitles();
+      }
+    }
+
+    async function updateSessionTitles() {
+      const response = await fetch('/api/v1/session_titles');
+      const data = await response.json();
+      if (data.status === 'success') {
+        const select = document.getElementById('session-title-select');
+        select.innerHTML = '<option value="">Select a session to review</option>';
+        data.titles.forEach(title => {
+          const option = document.createElement('option');
+          option.value = title;
+          option.textContent = title;
+          select.appendChild(option);
+        });
+      }
+    }
+
+    async function reviewSessions() {
+      const title = document.getElementById('session-title-select').value;
+      if (!title) return;
+      document.getElementById('user-input').value = `Review sessions titled '${title}'`;
+      document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    }
+
+    async function loadPluginButtons() {
+      const response = await fetch('/api/v1/plugins');
+      const data = await response.json();
+      if (data.status === 'success') {
+        const pluginButtons = document.getElementById('plugin-buttons');
+        pluginButtons.innerHTML = '';
+        data.plugins.forEach(plugin => {
+          const button = document.createElement('button');
+          button.className = 'btn btn-secondary me-2';
+          button.textContent = plugin.name.charAt(0).toUpperCase() + plugin.name.slice(1);
+          button.title = plugin.description;
+          button.dataset.plugin = JSON.stringify(plugin);
+          button.onclick = function() { triggerPlugin(plugin); };
+          pluginButtons.appendChild(button);
+        });
+      }
+    }
+
+    function listen() {
+      if ('webkitSpeechRecognition' in window) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.onresult = function(event) {
+          const text = event.results[0][0].transcript;
+          document.getElementById('user-input').value = text;
+        };
+        recognition.start();
+      } else {
+        alert('Speech recognition is not supported in your browser.');
+      }
+    }
+
+    function triggerPlugin(pluginData) {
+      const plugin = pluginData;
+      if (plugin.inputs.length === 0) {
+        fetch('/api/v1/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request: plugin.default_prompt })
+        }).then(resp => resp.json()).then(data => {
+          if (data.status === 'success') {
+            const assistantDiv = document.createElement('div');
+            assistantDiv.className = 'assistant-message';
+            assistantDiv.textContent = data.text || Object.values(data.results || {}).map(r => r.translation || r.text || JSON.stringify(r.data)).join('\n');
+            document.getElementById('chat-box').appendChild(assistantDiv);
+            document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+          }
+        });
+      } else {
+        const modal = new bootstrap.Modal(document.getElementById('pluginModal'));
+        document.getElementById('pluginModalLabel').textContent = `${plugin.name.charAt(0).toUpperCase() + plugin.name.slice(1)} Action`;
+        const modalBody = document.getElementById('pluginModalBody');
+        modalBody.innerHTML = '';
+        const params = {};
+
+        plugin.inputs.forEach(input => {
+          const div = document.createElement('div');
+          div.className = 'mb-3';
+          const label = document.createElement('label');
+          label.className = 'form-label';
+          label.textContent = input.label;
+          label.htmlFor = `plugin-input-${input.id}`;
+          div.appendChild(label);
+
+          if (input.type === 'text') {
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            textInput.className = 'form-control';
+            textInput.id = `plugin-input-${input.id}`;
+            textInput.value = input.default || '';
+            textInput.onchange = () => params[input.id] = textInput.value;
+            div.appendChild(textInput);
+          } else if (input.type === 'select') {
+            const select = document.createElement('select');
+            select.className = 'form-select';
+            select.id = `plugin-input-${input.id}`;
+            input.options.forEach(option => {
+              const opt = document.createElement('option');
+              opt.value = option.value;
+              opt.textContent = option.label;
+              if (option.value === input.default) opt.selected = true;
+              select.appendChild(opt);
+            });
+            select.onchange = () => params[input.id] = select.value;
+            div.appendChild(select);
+          } else if (input.type === 'checkbox') {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'form-check-input';
+            checkbox.id = `plugin-input-${input.id}`;
+            checkbox.checked = input.default || false;
+            checkbox.onchange = () => params[input.id] = checkbox.checked;
+            const checkLabel = document.createElement('label');
+            checkLabel.className = 'form-check-label ms-2';
+            checkLabel.htmlFor = `plugin-input-${input.id}`;
+            checkLabel.textContent = input.label;
+            div.appendChild(checkbox);
+            div.appendChild(checkLabel);
+          }
+          modalBody.appendChild(div);
+          params[input.id] = input.default || '';
+        });
+
+        document.getElementById('pluginModalSubmit').onclick = () => {
+          fetch('/api/v1/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request: plugin.default_prompt, params })
+          }).then(resp => resp.json()).then(data => {
+            modal.hide();
+            if (data.status === 'success') {
+              const assistantDiv = document.createElement('div');
+              assistantDiv.className = 'assistant-message';
+              assistantDiv.textContent = data.text || Object.values(data.results || {}).map(r => r.translation || r.text || JSON.stringify(r.data)).join('\n');
+              document.getElementById('chat-box').appendChild(assistantDiv);
+              document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+            }
+          });
+        };
+        modal.show();
+      }
+    }
+
+    updateSessionTitles();
+    loadPluginButtons();
+    {% endif %}
+
+    // Update system status periodically
+    function updateSystemStatus() {
+      fetch('/api/v1/status')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === "success") {
+            document.getElementById('cpu').textContent = data.system_stats.cpu.percent.toFixed(1);
+            document.getElementById('ram').textContent = data.system_stats.memory.percent.toFixed(1);
+            if (data.system_stats.gpu && data.system_stats.gpu.length > 0) {
+              document.getElementById('gpu').textContent = data.system_stats.gpu[0].load.toFixed(1);
+            }
+          }
+        })
+        .catch(err => console.error("Error fetching system status:", err));
+    }
+
+    // If logged in, start periodic updates
+    if (document.getElementById('status')) {
+      updateSystemStatus();
+      setInterval(updateSystemStatus, 10000); // Update every 10 seconds
+    }
+  </script>
+{% endblock %}
