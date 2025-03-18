@@ -45,23 +45,34 @@ Nexus AI provides several key advantages:
 
 ## Architecture
 
-Nexus uses a three-layer architecture for clean separation of concerns:
+Nexus uses a modular architecture for clean separation of concerns:
 
 ```
 nexus/
-├── application/          # Application layer
-│   └── orchestrator.py   # Request orchestration
-├── domain/               # Domain layer
-│   ├── capability/       # Capability abstraction layer
-│   │   └── providers/    # Capability providers (language, web, vector)
-│   ├── language/         # Language processing services
-│   ├── rag/              # Retrieval-Augmented Generation
-│   ├── agents/           # Agent framework
-│   └── system/           # System management
-└── infrastructure/       # Infrastructure layer
-    ├── performance/      # Performance monitoring and optimization
-    └── security/         # Authentication and authorization
+├── core/                  # Core functionality
+│   └── config/            # Configuration management
+├── orchestration/         # Request routing and handling
+│   ├── orchestrator.py    # Main orchestrator
+│   ├── plugin_processor.py # Plugin request handling
+│   └── rag_processor.py   # RAG request handling
+├── models/                # AI model implementations
+│   ├── language_service.py # Base interface for language models
+│   ├── mistral_model.py   # Mistral Small 3.1 implementation
+│   └── local_model.py     # Local model implementation
+├── domain/                # Domain-specific components
+│   ├── capability/        # Capability abstraction layer
+│   │   └── providers/     # Capability providers (language, web, vector)
+│   ├── plugins/           # Plugin management
+│   ├── rag/               # Retrieval-Augmented Generation
+│   ├── agents/            # Agent framework
+│   └── system/            # System management
+├── infrastructure/        # Infrastructure layer
+│   ├── performance/       # Performance monitoring and optimization
+│   └── security/          # Authentication and authorization
+└── api/                   # API interfaces and controllers
 ```
+
+This architecture is designed to be modular, extensible, and maintainable, with each component having a clear responsibility and interface.
 
 ## Advanced AI Capabilities
 
@@ -73,6 +84,11 @@ Nexus offers multiple levels of AI capabilities:
      - Provides faster responses
      - Ensures privacy for sensitive information
      - No internet connection required
+   - **Mistral Small 3.1**: Uses Mistral AI's compact but powerful model
+     - Superior reasoning capabilities compared to similar-sized models
+     - Excellent instruction following and code generation
+     - 8K context window for handling longer conversations
+     - Efficient API usage with manageable costs
    - **Cloud Fallback**: Uses Hugging Face API when needed
      - Handles complex queries beyond local model capabilities
      - Activates automatically when system load exceeds thresholds
