@@ -35,6 +35,7 @@ class Orchestrator:
         self.rag_service = None
         self.auth_service = None
         self.agent_service = None
+        self.capability_service = None
         
     async def initialize(self):
         """Initialize orchestrator and load services."""
@@ -78,6 +79,18 @@ class Orchestrator:
                 logger.info("Agent Service initialized")
             except Exception as e:
                 logger.warning(f"Agent Service not available: {str(e)}")
+                
+            # Initialize Capability Service
+            try:
+                from ..domain.capability import CapabilityService
+                self.capability_service = self.app_context.get_service(CapabilityService)
+                if not self.capability_service:
+                    self.capability_service = CapabilityService(self.config.get("capabilities", {}))
+                    self.app_context.register_service(CapabilityService, self.capability_service)
+                await self.capability_service.initialize()
+                logger.info("Capability Service initialized")
+            except Exception as e:
+                logger.warning(f"Capability Service not available: {str(e)}")
             
             # Register services
             await self._register_services()
@@ -205,6 +218,10 @@ class Orchestrator:
         # Register agent service
         if self.agent_service:
             self.services['agent'] = self.agent_service
+            
+        # Register capability service
+        if self.capability_service:
+            self.services['capability'] = self.capability_service
         
         # Register any plugins
         if self.plugin_loader:
@@ -574,8 +591,37 @@ class Orchestrator:
         Returns:
             Synthesis result
         """
+        # Try to use the capability service first if available
+        if self.capability_service:
+            try:
+                context_str = "\n".join([
+                    f"User: {entry.get('user', '')}\nAssistant: {entry.get('assistant', '')}"
+                    for entry in combined_context[-10:]  # Limit to the last 10 turns
+                ])
+                
+                prompt = (
+                    f"Based on these previous interactions:\n{context_str}\n"
+                    f"Provide a coherent summary or combined response for the request: '{request}'"
+                )
+                
+                result = await self.capability_service.generate_text(
+                    prompt=prompt,
+                    temperature=0.5
+                )
+                
+                return {
+                    "status": "success",
+                    "text": result.get("text", "No synthesis generated"),
+                    "from_sessions": True,
+                    "provider": result.get("provider", "capability")
+                }
+            except Exception as e:
+                logger.warning(f"Error using capability service for synthesis: {str(e)}")
+                # Fall back to language model if capability service fails
+        
+        # Fall back to language model if capability service not available or failed
         if not self.language_model:
-            return {"status": "error", "message": "Language model not available"}
+            return {"status": "error", "message": "No language processing available"}
             
         context_str = "\n".join([
             f"User: {entry.get('user', '')}\nAssistant: {entry.get('assistant', '')}"
@@ -682,7 +728,106 @@ class Orchestrator:
         Returns:
             List of (task_type, params) tuples
         """
-        if not self.language_model:
+        # Try to use the capability service for classification if available
+        if self.capability_service:
+            try:
+                # Build context string
+                context_text = "\n".join([
+                    f"User: {entry.get('user', '')}\nAssistant: {entry.get('assistant', '')}"
+                    for entry in context[-5:] if 'user' in entry  # Use last 5 turns at most
+                ])
+                
+                # Service names for classification
+                service_names = list(self.services.keys())
+                
+                # Prepare and send classification prompt
+                classification_prompt = (
+                    f"Given this conversation:\n{context_text}\n\n"
+                    f"Extract intents from the latest request: '{request}' "
+                    f"with parameters: {json.dumps(params)}. Return a JSON list of {{'task': 'module_name', 'params': {{key: value}}}} "
+                    f"for valid modules: {', '.join(service_names)}. Ensure params are validated and relevant to the task."
+                )
+                
+                # Use capability service to classify
+                classification_result = await self.capability_service.generate_text(
+                    prompt=classification_prompt,
+                    temperature=0.2  # Low temperature for more deterministic results
+                )
+                
+                if "text" in classification_result:
+                    # Extract JSON from text if needed
+                    text = classification_result["text"]
+                    if "[" in text and "]" in text:
+                        json_str = text[text.find("["):text.rfind("]")+1]
+                    else:
+                        json_str = text
+                        
+                    try:
+                        intents = json.loads(json_str)
+                        
+                        # Validate intents
+                        validated_tasks = []
+                        for intent in intents:
+                            if "task" in intent and intent["task"] in self.services:
+                                task_params = intent.get("params", {})
+                                validated_tasks.append((intent["task"], task_params))
+                                
+                        if validated_tasks:
+                            return validated_tasks
+                    except json.JSONDecodeError:
+                        logger.warning(f"Error parsing classification result: {text}")
+            except Exception as e:
+                logger.warning(f"Error using capability service for classification: {str(e)}")
+                # Fall back to language model if capability service fails
+        
+        # Fall back to language model if capability service not available or failed
+        if self.language_model:
+            # Use language model for classification
+            context_text = "\n".join([
+                f"User: {entry.get('user', '')}\nAssistant: {entry.get('assistant', '')}"
+                for entry in context[-5:] if 'user' in entry  # Use last 5 turns at most
+            ])
+            
+            # Generate the classification prompt
+            service_names = list(self.services.keys())
+            prompt = (
+                f"Given this conversation:\n{context_text}\n\n"
+                f"Extract intents from the latest request: '{request}' "
+                f"with parameters: {json.dumps(params)}. Return a JSON list of {{'task': 'module_name', 'params': {{key: value}}}} "
+                f"for valid modules: {', '.join(service_names)}. Ensure params are validated and relevant to the task."
+            )
+            
+            # Get classification from language model
+            result = await self.language_model.process(prompt, context=[])
+            
+            try:
+                # Parse the classification result
+                if "text" in result:
+                    # Extract JSON from text if needed
+                    text = result["text"]
+                    if "[" in text and "]" in text:
+                        json_str = text[text.find("["):text.rfind("]")+1]
+                    else:
+                        json_str = text
+                        
+                    intents = json.loads(json_str)
+                    
+                    # Validate intents
+                    validated_tasks = []
+                    for intent in intents:
+                        if "task" in intent and intent["task"] in self.services:
+                            task_params = intent.get("params", {})
+                            validated_tasks.append((intent["task"], task_params))
+                            
+                    if validated_tasks:
+                        return validated_tasks
+                        
+                # Fallback to simple rule-based classification
+                return self._simple_classify(request)
+            except Exception as e:
+                logger.error(f"Intent classification failed: {str(e)}")
+                return self._simple_classify(request)
+        else:
             # If no language model available, use simple rule-based classification
             # This is a simplified implementation
             request_lower = request.lower()
