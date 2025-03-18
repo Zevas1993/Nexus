@@ -1,0 +1,33 @@
+# Core dependencies
+aiohttp>=3.8.5
+asyncio>=3.4.3
+numpy>=1.24.0
+requests>=2.31.0
+logging>=0.4.9.6
+
+# Language model dependencies
+torch>=2.0.0
+transformers>=4.30.0
+
+# Web browsing dependencies
+# Optional: pyppeteer>=1.0.2 (for local browsing)
+
+# Vector database dependencies
+# Optional: chromadb>=0.4.18 (for local vector storage)
+
+# Authentication & Security
+pyjwt>=2.8.0
+
+# Performance monitoring
+psutil>=5.9.0
+
+# Web server
+flask>=2.0.0
+flask-cors>=4.0.0
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# For Docker containerization
+# docker>=6.1.0
+# docker-compose>=1.29.0

@@ -29,6 +29,7 @@ from nexus.infrastructure.performance.caching import RedisCacheService
 from nexus.application.orchestrator import Orchestrator
 from nexus.domain.language.language_model_service import LanguageModelService
 from nexus.domain.system.system_service import SystemManagementService
+from nexus.domain.capability import CapabilityService
 
 # Configure logging
 logging.basicConfig(
@@ -53,6 +54,10 @@ CORS(app)
 
 # Initialize application context with Flask config
 app_context = ApplicationContext(app.config)
+
+# Import configuration
+from config import Config
+config = Config()
 
 # Event queue for monitoring
 event_queue = deque(maxlen=100)
@@ -83,12 +88,46 @@ with app.app_context():
     # Get core services
     auth_service = app_context.get_service(JwtAuthenticationService)
     
+    # Initialize Manus AI capabilities
+    capability_config = {
+        "anthropic": {
+            "api_key": config.get("ANTHROPIC_API_KEY", ""),
+            "default_model": "claude-3-5-sonnet"
+        },
+        "openai": {
+            "api_key": config.get("OPENAI_API_KEY", ""),
+            "default_model": "gpt-4o"
+        },
+        "browserless": {
+            "api_key": config.get("BROWSERLESS_API_KEY", "")
+        },
+        "pinecone": {
+            "api_key": config.get("PINECONE_API_KEY", ""),
+            "environment": config.get("PINECONE_ENVIRONMENT", ""),
+            "index_name": config.get("PINECONE_INDEX_NAME", "nexus-embeddings")
+        },
+        "default_text_provider": config.get("DEFAULT_TEXT_PROVIDER", ""),
+        "default_code_provider": config.get("DEFAULT_CODE_PROVIDER", ""),
+        "default_web_provider": config.get("DEFAULT_WEB_PROVIDER", ""),
+        "default_vector_provider": config.get("DEFAULT_VECTOR_PROVIDER", ""),
+        "enable_local_puppeteer": config.get("ENABLE_LOCAL_PUPPETEER", True),
+        "enable_chroma": config.get("ENABLE_CHROMA", True)
+    }
+    
+    capability_service = CapabilityService(capability_config)
+    app_context.register_service(CapabilityService, capability_service)
+    
     # Create and initialize orchestrator
     orchestrator = Orchestrator(app_context)
-    loop = get_or_create_event_loop()
-    loop.run_until_complete(orchestrator.initialize())
     
-    add_event("Application initialized")
+    # Initialize services asynchronously
+    loop = get_or_create_event_loop()
+    loop.run_until_complete(asyncio.gather(
+        capability_service.initialize(),
+        orchestrator.initialize()
+    ))
+    
+    add_event("Application initialized with Manus AI capabilities")
 
 @app.route('/', methods=['GET'])
 def index():
@@ -176,9 +215,21 @@ async def system_status():
         system_service = app_context.get_service(SystemManagementService)
         status = await system_service.process("check status", task="hardware_check")
         
+        # Get capability service status
+        capability_service = app_context.get_service(CapabilityService)
+        capabilities = {}
+        
+        for cap_type in capability_service.manager.default_providers:
+            provider = capability_service.get_default_provider(cap_type)
+            capabilities[cap_type.value] = {
+                "default_provider": provider,
+                "available_providers": capability_service.get_available_providers(cap_type)
+            }
+        
         return jsonify({
             "status": "success",
-            "system_stats": status.get("system_stats", {})
+            "system_stats": status.get("system_stats", {}),
+            "capabilities": capabilities
         })
     except Exception as e:
         logger.error(f"Error getting system status: {str(e)}")
@@ -255,6 +306,36 @@ def set_session_title():
         "status": "success", 
         "message": f"Session title set to {new_title}"
     })
+
+@app.route('/api/v1/capabilities', methods=['GET'])
+async def get_capabilities():
+    """Get all available AI capabilities and providers."""
+    if 'google_id_token' not in session:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
+    try:
+        capability_service = app_context.get_service(CapabilityService)
+        
+        # Get available capabilities
+        capabilities = {}
+        
+        for cap_type in capability_service.manager.default_providers:
+            provider = capability_service.get_default_provider(cap_type)
+            capabilities[cap_type.value] = {
+                "default_provider": provider,
+                "available_providers": capability_service.get_available_providers(cap_type)
+            }
+            
+        return jsonify({
+            "status": "success",
+            "capabilities": capabilities
+        })
+    except Exception as e:
+        logger.error(f"Error getting capabilities: {str(e)}")
+        return jsonify({
+            "status": "error", 
+            "message": f"Error getting capabilities: {str(e)}"
+        }), 500
 
 @app.route('/api/v1/plugins', methods=['GET'])
 def get_plugins():

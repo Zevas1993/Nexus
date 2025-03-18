@@ -14,23 +14,66 @@ class Config:
     """Configuration manager for Nexus AI Assistant."""
     
     DEFAULT_CONFIG = {
+        # Core settings
         'APP_NAME': 'Nexus AI Assistant',
         'DEBUG': False,
         'SECRET_KEY': 'default_secret_key_change_in_production',
+        'LOG_LEVEL': 'INFO',
+        'PORT': 5000,
+        'HOST': 'localhost',
+        
+        # Database and caching
         'DATABASE_URL': 'sqlite:///app.db',
         'REDIS_URL': 'redis://localhost:6379/0',
         'CELERY_BROKER_URL': 'redis://localhost:6379/0',
         'CELERY_RESULT_BACKEND': 'redis://localhost:6379/0',
+        
+        # Authentication
         'GOOGLE_CLIENT_ID': '',
-        'HF_API_TOKEN': '',
         'CORS_ALLOWED_ORIGINS': '*',
-        'LOG_LEVEL': 'INFO',
+        
+        # API Rate limiting
         'RATE_LIMIT': '10 per minute',
+        
+        # Plugins
         'PLUGIN_DIR': 'plugins',
+        
+        # Base Language Model
+        'HF_API_TOKEN': '',
+        'HF_ENDPOINT': 'https://api-inference.huggingface.co/models/gpt2',
+        'LOCAL_MODEL': 'EleutherAI/gpt-neo-125M',
+        
+        # Embeddings
         'EMBEDDING_MODEL': 'all-mpnet-base-v2',
         'MAX_TOKENS': 1024,
-        'PORT': 5000,
-        'HOST': 'localhost',
+        
+        # System thresholds
+        'THRESHOLD_CPU': 80,
+        'THRESHOLD_GPU': 80,
+        'MAX_LENGTH': 512,
+        'CONTEXT_WINDOW': 5,
+        
+        # Manus AI - Language Models
+        'ANTHROPIC_API_KEY': '',
+        'OPENAI_API_KEY': '',
+        
+        # Manus AI - Web Browsing
+        'BROWSERLESS_API_KEY': '',
+        
+        # Manus AI - Vector Storage
+        'PINECONE_API_KEY': '',
+        'PINECONE_ENVIRONMENT': '',
+        'PINECONE_INDEX_NAME': 'nexus-embeddings',
+        
+        # Manus AI - Default providers
+        'DEFAULT_TEXT_PROVIDER': '',
+        'DEFAULT_CODE_PROVIDER': '',
+        'DEFAULT_WEB_PROVIDER': '',
+        'DEFAULT_VECTOR_PROVIDER': '',
+        
+        # Manus AI - Feature toggles
+        'ENABLE_LOCAL_PUPPETEER': True,
+        'ENABLE_CHROMA': True,
     }
     
     def __init__(self, config_file: Optional[str] = None):
