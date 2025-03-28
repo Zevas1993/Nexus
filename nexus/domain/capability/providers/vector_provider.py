@@ -29,10 +29,18 @@ class PineconeProvider(CapabilityProvider):
         self.environment = self.config.get("environment", os.environ.get("PINECONE_ENVIRONMENT", ""))
         self.index_name = self.config.get("index_name", "nexus-embeddings")
         self.namespace = self.config.get("namespace", "default")
-        self.dimension = self.config.get("dimension", 1536)  # Default for OpenAI embeddings
+        # Dimension should ideally come from embedding model config, require it here?
+        self.dimension = self.config.get("dimension")
+        if not self.dimension:
+             logger.error("Pinecone provider requires 'dimension' in config.")
+             self.enabled = False
+             return
         self.timeout = self.config.get("timeout", 60)
-        self.api_url = f"https://{self.index_name}-{self.environment}.svc.{self.environment}.pinecone.io"
-        
+        # Construct API URL carefully based on environment
+        # Example: "https://{index_name}-{project_id}.svc.{environment}.pinecone.io" - project_id might be needed?
+        # Using the provided structure for now, assuming environment includes project info if needed by Pinecone.
+        self.api_url = f"https://{self.index_name}-{self.environment}.svc.{self.environment}.pinecone.io" # Verify this structure
+
     async def initialize(self) -> None:
         """Initialize the provider."""
         if not self.api_key or not self.environment:
@@ -60,15 +68,17 @@ class PineconeProvider(CapabilityProvider):
                 ) as response:
                     if response.status != 200:
                         # Index doesn't exist, try to create it
-                        logger.info(f"Index {self.index_name} doesn't exist, creating...")
-                        
-                        # Create the index
+                        logger.info(f"Pinecone index '{self.index_name}' doesn't exist, attempting creation...")
+
+                        # Create the index - Ensure dimension is correctly passed
                         create_payload = {
                             "name": self.index_name,
-                            "dimension": self.dimension,
-                            "metric": "cosine"
+                            "dimension": int(self.dimension), # Ensure it's an integer
+                            "metric": "cosine", # Common default, make configurable?
+                            # Add pod spec configuration if needed (e.g., environment, pod_type)
+                            # "spec": { "pod": { "environment": self.environment, "pod_type": "p1.x1" } } # Example
                         }
-                        
+
                         async with session.post(
                             f"https://controller.{self.environment}.pinecone.io/databases",
                             headers=headers,
@@ -315,9 +325,14 @@ class ChromaProvider(CapabilityProvider):
         self.port = self.config.get("port", 8000)
         self.collection_name = self.config.get("collection_name", "nexus-embeddings")
         self.api_url = f"http://{self.host}:{self.port}"
-        self.dimension = self.config.get("dimension", 1536)  # Default for OpenAI embeddings
+        # Dimension should ideally come from embedding model config
+        self.dimension = self.config.get("dimension")
+        # Chroma doesn't strictly require dimension at init if using default embeddings,
+        # but good practice to know it for validation or if creating collection.
+        if not self.dimension:
+             logger.warning("Chroma provider 'dimension' not specified in config. Assuming default embedding model handles it.")
         self.timeout = self.config.get("timeout", 60)
-        
+
     async def initialize(self) -> None:
         """Initialize the provider."""
         try:
@@ -361,9 +376,13 @@ class ChromaProvider(CapabilityProvider):
                         
                         create_payload = {
                             "name": self.collection_name,
-                            "metadata": {"dimension": self.dimension}
+                            # Optionally add metadata like embedding function if needed by Chroma version
+                            # "metadata": {"hnsw:space": "cosine"} # Example for metric
                         }
-                        
+                        # If dimension is known, maybe add it to collection metadata if supported?
+                        # if self.dimension:
+                        #    create_payload.setdefault("metadata", {})["dimension"] = int(self.dimension)
+
                         async with session.post(
                             f"{self.api_url}/api/v1/collections",
                             json=create_payload,

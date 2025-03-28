@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 
 from .abstraction import CapabilityType, CapabilityManager
 from .providers import (
-    AnthropicProvider, OpenAIProvider, 
+    AnthropicProvider, OpenAIProvider, OllamaProvider, # <-- Import OllamaProvider
     BrowserlessProvider, PuppeteerLocalProvider,
     PineconeProvider, ChromaProvider
 )
@@ -65,7 +65,19 @@ class CapabilityService:
             logger.info("Registering OpenAI provider")
             openai = OpenAIProvider(openai_config)
             self.manager.register_provider(openai)
-            
+
+        # Register Ollama provider if configured
+        ollama_config = self.config.get("ollama", {})
+        # Check if Ollama URL is set OR a default model is specified
+        ollama_api_url = ollama_config.get("api_url", os.environ.get("OLLAMA_API_URL", None))
+        ollama_default_model = ollama_config.get("default_model", os.environ.get("OLLAMA_DEFAULT_MODEL", None))
+        if ollama_api_url or ollama_default_model: # Register if either URL or default model is set
+            logger.info("Registering Ollama provider")
+            ollama = OllamaProvider(ollama_config)
+            self.manager.register_provider(ollama)
+        else:
+            logger.info("Ollama provider not configured (OLLAMA_API_URL or OLLAMA_DEFAULT_MODEL not set)")
+
         # Register Browserless provider if configured
         browserless_config = self.config.get("browserless", {})
         browserless_api_key = browserless_config.get("api_key", os.environ.get("BROWSERLESS_API_KEY", ""))
@@ -101,16 +113,33 @@ class CapabilityService:
             chroma = ChromaProvider(chroma_config)
             self.manager.register_provider(chroma)
             
-        # Set default providers based on config or availability
-        default_text_provider = self.config.get("default_text_provider", "anthropic" if anthropic_api_key else "openai" if openai_api_key else None)
+        # Set default providers based on config or availability (Include Ollama)
+        # Determine available text providers
+        available_text_providers = []
+        if self.manager.get_provider("anthropic"): available_text_providers.append("anthropic")
+        if self.manager.get_provider("openai"): available_text_providers.append("openai")
+        if self.manager.get_provider("ollama"): available_text_providers.append("ollama")
+
+        # Set default text provider (Anthropic > OpenAI > Ollama > None)
+        default_text_provider = self.config.get("default_text_provider")
+        if not default_text_provider:
+            if "anthropic" in available_text_providers: default_text_provider = "anthropic"
+            elif "openai" in available_text_providers: default_text_provider = "openai"
+            elif "ollama" in available_text_providers: default_text_provider = "ollama"
+
         if default_text_provider:
             try:
                 self.manager.set_default_provider(CapabilityType.TEXT_GENERATION, default_text_provider)
                 logger.info(f"Set {default_text_provider} as default for text generation")
             except ValueError as e:
                 logger.warning(f"Could not set default text provider: {str(e)}")
-                
-        default_code_provider = self.config.get("default_code_provider", "openai" if openai_api_key else "anthropic" if anthropic_api_key else None)
+        # Set default code provider (OpenAI > Anthropic > Ollama > None)
+        default_code_provider = self.config.get("default_code_provider")
+        if not default_code_provider:
+            if "openai" in available_text_providers: default_code_provider = "openai" # OpenAI often better for code
+            elif "anthropic" in available_text_providers: default_code_provider = "anthropic"
+            elif "ollama" in available_text_providers: default_code_provider = "ollama"
+
         if default_code_provider:
             try:
                 self.manager.set_default_provider(CapabilityType.CODE_GENERATION, default_code_provider)

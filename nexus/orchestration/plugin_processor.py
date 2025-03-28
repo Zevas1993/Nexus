@@ -66,40 +66,45 @@ class PluginProcessor:
             Plugin name if detected, None otherwise
         """
         if not self.plugin_loader or not hasattr(self.plugin_loader, 'registry'):
+            logger.debug("Plugin loader or registry not available for extraction.")
             return None
-            
+
         try:
-            # Get all registered plugins
             plugin_info = self.plugin_loader.registry.get_all_plugin_info()
-            
-            # Check for plugin name in request
-            request_lower = request.lower()
+            request_lower = request.lower().strip()
+
+            # Prioritize explicit activation phrases
+            activation_phrases = ["use plugin ", "activate plugin ", "run plugin ", "using plugin "]
             for plugin in plugin_info:
-                plugin_name = plugin.get("name", "").lower()
-                if f"use {plugin_name}" in request_lower or f"using {plugin_name}" in request_lower:
-                    return plugin.get("name")
-                    
-            # Additional checks for common phrases
-            prefixes = [
-                "with the ",
-                "through the ",
-                "via the "
-            ]
-            
-            for plugin in plugin_info:
-                plugin_name = plugin.get("name", "").lower()
+                plugin_name = plugin.get("name", "")
+                plugin_name_lower = plugin_name.lower()
+                if not plugin_name_lower:
+                    continue
+
+                for phrase in activation_phrases:
+                    if request_lower.startswith(phrase + plugin_name_lower):
+                        logger.debug(f"Detected plugin '{plugin_name}' via activation phrase: '{phrase}'")
+                        return plugin_name
                 
-                # Check plugin name directly
-                if plugin_name in request_lower:
-                    return plugin.get("name")
-                
-                # Check with prefixes
-                for prefix in prefixes:
-                    if f"{prefix}{plugin_name}" in request_lower:
-                        return plugin.get("name")
+                # Check for variations like "use the [plugin_name] plugin"
+                if f"use the {plugin_name_lower} plugin" in request_lower or \
+                   f"using the {plugin_name_lower} plugin" in request_lower:
+                     logger.debug(f"Detected plugin '{plugin_name}' via specific phrase.")
+                     return plugin_name
+
+            # Less specific matching (potential for false positives, lower priority)
+            # Consider adding keywords from manifest here in the future
+            # for plugin in plugin_info:
+            #     plugin_name = plugin.get("name", "")
+            #     plugin_name_lower = plugin_name.lower()
+            #     if plugin_name_lower in request_lower:
+            #         # Add more context checks if using direct name matching to reduce false positives
+            #         logger.debug(f"Potentially detected plugin '{plugin_name}' via name mention (lower confidence).")
+            #         # return plugin_name # Be cautious enabling this
+
         except Exception as e:
-            logger.warning(f"Error extracting plugin name: {str(e)}")
-            
+            logger.warning(f"Error extracting plugin name: {str(e)}", exc_info=self.app_context.debug)
+
         return None
         
     async def process(self, request: str, params: Dict[str, Any] = None) -> Dict[str, Any]:

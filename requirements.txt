@@ -1,18 +1,21 @@
 # Core dependencies
 aiohttp>=3.8.5
-asyncio>=3.4.3
+# asyncio>=3.4.3 # Part of standard library, likely unnecessary
 numpy>=1.24.0
 requests>=2.31.0
-logging>=0.4.9.6
+# logging>=0.4.9.6 # Use standard library logging
 
 # Language model dependencies
-torch>=2.0.0
-transformers>=4.30.0
+# torch>=2.0.0 # Potentially unused if only using Ollama/APIs for local models
+# transformers>=4.30.0 # Potentially unused if only using Ollama/APIs for local models
 
 # Web browsing dependencies
+beautifulsoup4>=4.12.2 # For HTML parsing
+lxml>=4.9.3          # Efficient parser for BeautifulSoup
 # Optional: pyppeteer>=1.0.2 (for local browsing)
 
 # Vector database dependencies
+pinecone-client>=3.0.0 # Added for PineconeProvider
 # Optional: chromadb>=0.4.18 (for local vector storage)
 
 # Authentication & Security
@@ -24,13 +27,15 @@ psutil>=5.9.0
 # Web server
 flask>=2.0.0
 flask-cors>=4.0.0
+flask-limiter>=3.0.0 # Added missing dependency for rate limiting
+Flask-SQLAlchemy>=3.0.0 # Added missing dependency for database
 
 # Environment configuration
 python-dotenv>=1.0.0
 
 # AI Coding Tools
-tabnine>=1.5.0    # Free API client for Tabnine
-codiga-client>=0.1.2  # Code quality analysis
+# tabnine>=1.5.0    # Removed - Not found on PyPI and not imported in the project
+# codiga-client>=0.1.2  # Removed - Not found on PyPI and not imported in the project
 pyyaml>=6.0.1     # Configuration handling
 
 # For Docker containerization

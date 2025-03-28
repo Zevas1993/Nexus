@@ -49,50 +49,50 @@ Nexus uses a modular architecture for clean separation of concerns:
 
 ```
 nexus/
-├── core/                  # Core functionality
-│   └── config/            # Configuration management
+├── core/                  # Core functionality (e.g., config)
+│   └── config/
 ├── orchestration/         # Request routing and handling
-│   ├── orchestrator.py    # Main orchestrator
-│   ├── plugin_processor.py # Plugin request handling
-│   └── rag_processor.py   # RAG request handling
-├── models/                # AI model implementations
-│   ├── language_service.py # Base interface for language models
-│   ├── mistral_model.py   # Mistral Small 3.1 implementation
-│   └── local_model.py     # Local model implementation
+│   ├── orchestrator.py
+│   ├── plugin_processor.py
+│   └── rag_processor.py
+├── models/                # Interfaces and specific model integrations (e.g., Mistral)
+│   ├── language_service.py
+│   └── mistral_model.py
 ├── domain/                # Domain-specific components
-│   ├── capability/        # Capability abstraction layer
-│   │   └── providers/     # Capability providers (language, web, vector)
-│   ├── plugins/           # Plugin management
+│   ├── capability/        # Capability abstraction layer and providers
+│   │   ├── abstraction.py
+│   │   ├── service.py
+│   │   └── providers/     # (language [Anthropic, OpenAI, Ollama], web, vector)
 │   ├── rag/               # Retrieval-Augmented Generation
 │   ├── agents/            # Agent framework
-│   └── system/            # System management
-├── infrastructure/        # Infrastructure layer
-│   ├── performance/       # Performance monitoring and optimization
-│   └── security/          # Authentication and authorization
-└── api/                   # API interfaces and controllers
+│   └── system/            # System management (Placeholder)
+├── infrastructure/        # Infrastructure layer (e.g., security, performance)
+│   ├── performance/
+│   └── security/
+└── application/           # Application-level services (Placeholder/TBD)
+    └── orchestrator.py    # (Note: May consolidate with top-level orchestration)
+
+plugins/                   # Top-level directory for plugins
+└── weather_service/       # Example plugin
+
+tests/                     # Unit and integration tests
 ```
 
-This architecture is designed to be modular, extensible, and maintainable, with each component having a clear responsibility and interface.
+This architecture is designed to be modular, extensible, and maintainable. (Note: Some directories like `api/` mentioned previously might have been refactored or removed).
 
 ## Advanced AI Capabilities
 
 Nexus offers multiple levels of AI capabilities:
 
 1. **Base AI**
-   - **Local Model**: Uses GPT-Neo-125M running locally on your GPU
-     - Handles most common queries
-     - Provides faster responses
-     - Ensures privacy for sensitive information
-     - No internet connection required
-   - **Mistral Small 3.1**: Uses Mistral AI's compact but powerful model
-     - Superior reasoning capabilities compared to similar-sized models
-     - Excellent instruction following and code generation
-     - 8K context window for handling longer conversations
-     - Efficient API usage with manageable costs
-   - **Cloud Fallback**: Uses Hugging Face API when needed
-     - Handles complex queries beyond local model capabilities
-     - Activates automatically when system load exceeds thresholds
-     - Manages throttling and API rate limits
+   - **Local Models via Ollama**: Integrates with locally running models served by Ollama (e.g., Llama 3, Mistral, Phi). Requires Ollama to be installed and running separately.
+     - Handles queries locally for speed and privacy.
+     - Model choice configured via environment variables (`OLLAMA_DEFAULT_MODEL`).
+     - No internet connection required (after model download via Ollama).
+   - **Mistral Small 3.1 API**: Uses Mistral AI's efficient cloud model via API key.
+     - Excellent reasoning and instruction following.
+     - 8K context window.
+   - **Cloud Fallback (Planned/Legacy)**: The configuration includes settings for Hugging Face API, but current providers focus on Anthropic, OpenAI, and Ollama.
 
 2. **Enhanced AI (Manus Integration)**
    - **Premium Language Models**: Claude and GPT-4o access
@@ -132,19 +132,26 @@ Nexus offers multiple levels of AI capabilities:
    cp .env.example .env
    # Edit .env with your API keys
    ```
-   
-   For Manus AI capabilities, add your API keys:
-   ```
-   # Language Model APIs
+   # --- Core Language Model APIs ---
+   # Choose at least one cloud provider OR configure Ollama
    ANTHROPIC_API_KEY=your_anthropic_api_key
    OPENAI_API_KEY=your_openai_api_key
-   
-   # Web Browsing APIs
+   # MISTRAL_SMALL_API_KEY=your_mistral_api_key # (Note: Mistral config exists but provider isn't implemented in models/)
+
+   # --- Local Model via Ollama ---
+   # OLLAMA_API_URL=http://localhost:11434 # Default if not set
+   OLLAMA_DEFAULT_MODEL=llama3 # Example: Set your preferred default Ollama model
+
+   # --- Web Browsing ---
+   # Choose Browserless (requires API key) or local Puppeteer (fallback)
    BROWSERLESS_API_KEY=your_browserless_api_key
-   
-   # Vector Storage APIs
+   # CHROME_PATH=/path/to/your/chrome # Optional: Specify path for local Puppeteer
+
+   # --- Vector Storage ---
+   # Choose Pinecone (requires API key) or local ChromaDB (default)
    PINECONE_API_KEY=your_pinecone_api_key
    PINECONE_ENVIRONMENT=your_pinecone_environment
+   # CHROMA_DB_PATH=./chroma_data # Optional: Specify path for local ChromaDB data
    ```
 
 4. Run the application:
@@ -164,16 +171,17 @@ docker-compose up -d
 
 ## Plugin Development
 
-Create new plugins by adding a directory to the `plugins/` folder:
+Create new plugins by adding a directory to the top-level `plugins/` folder:
 
 ```
 plugins/
 └── my_plugin/
+    ├── __init__.py      # Standard Python package marker
     ├── manifest.json    # Plugin metadata and UI configuration
-    └── my_plugin.py     # Plugin implementation
+    └── my_plugin.py     # Plugin implementation (or other structure)
 ```
 
-See the weather plugin for an example implementation.
+See the `plugins/weather_service/` directory for an example implementation.
 
 ## License
 
