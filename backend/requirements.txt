@@ -1,0 +1,28 @@
+# backend/requirements.txt
+
+# Core Flask & Web Server
+Flask>=3.0 # Use a recent version
+Flask-SQLAlchemy>=3.1
+Flask-Migrate>=4.0
+Flask-Login>=0.6
+Flask-Cors>=4.0
+Flask-Bcrypt>=1.0
+python-dotenv>=1.0
+click>=8.0 # For manage.py CLI
+
+# Database Driver (Choose one based on DATABASE_URL)
+psycopg2-binary # For PostgreSQL
+# mysqlclient # For MySQL
+# Or leave blank if using default SQLite
+
+# AI & RAG Components
+ollama>=0.1.8   # Official Ollama client
+chromadb>=0.4.24 # Vector Database client
+duckduckgo-search>=5.0 # For Web Search tool
+
+# General Utilities
+requests>=2.31 # Often useful
+
+# Production Server (Optional, choose one)
+# gunicorn # WSGI server
+# uvicorn # ASGI server (if using async features later)
