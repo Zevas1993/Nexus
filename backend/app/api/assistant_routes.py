@@ -34,24 +34,53 @@ def chat():
         )
 
         if stream:
-            # --- Implement Streaming Response ---
-            # If run_assistant_pipeline returns a generator:
+            # run_assistant_pipeline now returns (generator, initial_turn_object)
+            if not isinstance(response_data, tuple) or len(response_data) != 2:
+                 current_app.logger.error("Orchestrator did not return expected tuple for streaming.")
+                 return jsonify({"error": "Internal error during streaming setup"}), 500
+
+            response_generator, initial_turn = response_data
+
+            # --- Implement Streaming Response & DB Save ---
             def generate():
+                full_response = ""
                 try:
-                    for chunk in response_data: # Assuming response_data is the generator
+                    for chunk in response_generator:
+                        full_response += chunk
                         # Format chunk according to desired streaming protocol (e.g., SSE)
                         yield f"data: {json.dumps({'response_chunk': chunk})}\n\n"
                     # Optionally send a final 'done' message
                     yield f"data: {json.dumps({'status': 'done'})}\n\n"
+
+                    # --- Save full response to DB after streaming is complete ---
+                    # We need app context to interact with the DB
+                    with current_app.app_context():
+                        try:
+                            if initial_turn:
+                                initial_turn.assistant_response = full_response
+                                db.session.add(initial_turn) # Add the updated turn object
+                                db.session.commit()
+                                current_app.logger.info(f"Saved streamed conversation turn ID {initial_turn.id} to DB.")
+                            else:
+                                current_app.logger.error("Initial turn object was None, cannot save streamed response.")
+                        except Exception as db_err:
+                            current_app.logger.error(f"Failed to save streamed conversation turn to DB: {db_err}", exc_info=True)
+                            db.session.rollback()
+                    # --- End DB Save ---
+
                 except Exception as e:
-                    # Log error during streaming
-                    current_app.logger.error(f"Error during assistant response streaming: {e}")
+                    # Log error during streaming generation
+                    current_app.logger.error(f"Error during assistant response streaming generation: {e}", exc_info=True)
                     # Send an error message through the stream if possible
-                    yield f"data: {json.dumps({'error': 'Streaming failed'})}\n\n"
+                    yield f"data: {json.dumps({'error': 'Streaming failed during generation'})}\n\n"
+                    # Also attempt to rollback DB if initial_turn exists but saving failed before this point
+                    with current_app.app_context():
+                        db.session.rollback()
+
 
             return Response(generate(), mimetype='text/event-stream')
         else:
-            # Simple non-streaming response
+            # Simple non-streaming response (orchestrator already saved to DB)
             return jsonify({"response": response_data}), 200
 
     except Exception as e:

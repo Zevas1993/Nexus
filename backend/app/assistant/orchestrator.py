@@ -72,49 +72,123 @@ def run_assistant_pipeline(user_id: int, user_message: str, session_id: str = No
     tool_descriptions = get_tool_descriptions()
     formatted_system_prompt = SYSTEM_PROMPT.format(tool_descriptions=tool_descriptions or "No tools available.")
 
-    # Format history for the LLM
-    formatted_history = format_history_ollama(history) # Use Ollama format
+    # Format history for the LLM (Ollama format)
+    formatted_history_list = format_history_ollama(history)
+
+    # Decide which base prompt template to use
+    # If we have context and it wasn't an error, use the RAG template
+    use_rag_template = bool(retrieved_context_str and retrieved_context_str != "Context retrieval failed.")
 
     # Create the messages list for Ollama
     messages = []
     messages.append({"role": "system", "content": formatted_system_prompt})
 
     # Add formatted history (if any)
-    if formatted_history:
-        messages.extend(formatted_history)
+    if formatted_history_list:
+        messages.extend(formatted_history_list)
 
-    # Add RAG context and User Query
-    # Simple approach: just prepend context to the user message.
-    # More sophisticated approaches might involve structuring the prompt differently
-    # or having the LLM specifically reference the context section.
-    user_query_with_context = user_message
-    if retrieved_context_str and retrieved_context_str != "Context retrieval failed.":
-         # Use a template that explicitly includes context
-         # This requires adjusting the prompt templates and how history is inserted
-         # For simplicity here, just prepend.
-         user_query_with_context = f"Use the following context if relevant:\nContext:\n{retrieved_context_str}\n\nUser Query: {user_message}"
+    # Add the final user query, potentially incorporating context via the template structure
+    if use_rag_template:
+        # Format history as a string for insertion into the RAG template's history section
+        history_str_for_template = format_history_string(history)
+        final_user_prompt = RAG_PROMPT_TEMPLATE.format(
+            system_prompt="", # System prompt is already a separate message
+            retrieved_context=retrieved_context_str,
+            history=history_str_for_template,
+            user_query=user_message
+        )
+        # Remove the initial system prompt part from the template if it was included
+        final_user_prompt = final_user_prompt.split("Conversation History (Oldest to Newest):", 1)[-1]
+        final_user_prompt = f"Conversation History (Oldest to Newest):{final_user_prompt}" # Add back the header
+    else:
+        # Use basic chat template structure or just the user message if no history
+        if history:
+             history_str_for_template = format_history_string(history)
+             # Using BASIC_CHAT_TEMPLATE structure implicitly by placing history before query
+             final_user_prompt = f"Conversation History (Oldest to Newest):\n{history_str_for_template}\n\nUser Query: {user_message}"
+             # Alternatively, just append user message if history is already in messages list
+             # final_user_prompt = user_message # If history is handled by messages list
+        else:
+             final_user_prompt = user_message # No history, just the query
 
-    messages.append({"role": "user", "content": user_query_with_context})
+    # Append the final constructed user message
+    messages.append({"role": "user", "content": final_user_prompt})
+    logger.debug(f"Final prompt messages structure for LLM: {messages}")
 
-    # --- 4. Call LLM ---
+    # --- 4. Call LLM & Handle Potential Tool Use ---
     try:
-        # TODO: Implement logic to decide if tools are needed BEFORE the main call,
-        # potentially using a separate LLM call or specific prompt structure.
-        # TODO: Implement parsing LLM output for tool calls and executing them.
-        # For now, just get a direct response.
+        # --- Tool Use Implementation Placeholder ---
+        # This is where the logic for tool use needs to be implemented.
+        # A typical flow might involve:
+        # 1. First LLM Call: Ask the LLM if a tool is needed based on the user query,
+        #    history, context, and available tool descriptions. Use specific prompting
+        #    to encourage a structured response indicating the tool name and arguments
+        #    (e.g., JSON format).
+        #
+        # initial_llm_response = get_llm_response(messages, stream=False) # Non-streaming for tool check
+        #
+        # 2. Parse Response: Check if initial_llm_response indicates a tool call.
+        #    Parse out the tool name and arguments.
+        #    tool_name, tool_args = parse_tool_call(initial_llm_response) # Implement this parsing function
+        #
+        # 3. Execute Tool (if requested):
+        #    if tool_name and tool_args is not None:
+        #        logger.info(f"LLM requested tool: {tool_name} with args: {tool_args}")
+        #        tool_instance = get_tool(tool_name)
+        #        if tool_instance:
+        #            try:
+        #                tool_result = tool_instance.run(tool_args) # Assuming run takes string/dict args
+        #                logger.info(f"Tool {tool_name} executed. Result: {tool_result[:100]}...")
+        #            except Exception as tool_err:
+        #                logger.error(f"Error executing tool {tool_name}: {tool_err}", exc_info=True)
+        #                tool_result = f"Error executing tool {tool_name}: {tool_err}"
+        #        else:
+        #            tool_result = f"Error: Tool '{tool_name}' not found."
+        #
+        #        # 4. Second LLM Call (with tool result): Append the tool result to the
+        #        #    message history and call the LLM again to get the final natural
+        #        #    language response for the user.
+        #        messages.append({"role": "assistant", "content": initial_llm_response}) # Record LLM's tool request
+        #        messages.append({"role": "tool", "content": tool_result}) # Add tool result (role might vary based on LLM)
+        #        # Now call LLM again for final response
+        #        response_data = get_llm_response(messages, stream=stream)
+        #
+        #    else:
+        #        # No tool requested, use the initial response directly (or call again if needed)
+        #        # If the first call was just for tool check, might need to call again for final answer
+        #        logger.info("No tool requested by LLM.")
+        #        response_data = get_llm_response(messages, stream=stream) # Call LLM for final answer
+        #
+        # --- End Tool Use Implementation Placeholder ---
 
-        response_data = get_llm_response(messages, stream=stream) # Pass stream preference
+        # --- Simplified Call (No Tool Logic) ---
+        # For now, we bypass the tool logic and make a direct call for the final response.
+        logger.warning("Tool use logic is not implemented. Proceeding with direct LLM call.")
+        response_data = get_llm_response(messages, stream=stream)
+        # --- End Simplified Call ---
 
-        # If streaming, the response_data is a generator, return it directly
+
+        # If streaming, the response_data is a generator, return it with the initial turn object
         if stream:
             # We need to handle saving the full response *after* streaming is complete.
             # This is tricky. The API route currently handles yielding.
             # We might need a wrapper or callback mechanism.
             # For now, we won't save the streamed response accurately to DB in this simple version.
             logger.info("Streaming response initiated.")
-            # The generator itself is returned to the route
-            # Saving to DB happens *after* this function returns in the streaming case (needs adjustment)
-            return response_data
+            # For streaming, we need to save *after* the stream is consumed.
+            # We'll create the DB object now but save it later in the route handler.
+            # Return the generator AND the initial turn object (without response).
+            logger.info("Streaming response initiated. DB save deferred.")
+            initial_turn = ConversationTurn(
+                user_id=user_id,
+                session_id=session_id,
+                user_message=user_message,
+                assistant_response=None, # Will be filled later
+                retrieved_context=retrieved_context_str if retrieved_context_str else None,
+                # tool_used=... # Add tool tracking later
+            )
+            # Return tuple: (generator, initial_db_object)
+            return response_data, initial_turn
 
         # If not streaming, response_data is the full string
         assistant_response = response_data
@@ -128,7 +202,8 @@ def run_assistant_pipeline(user_id: int, user_message: str, session_id: str = No
         if stream:
              raise # Let the route handler catch it for streaming error message
 
-    # --- 5. Save to Database (Only for non-streaming responses in this version) ---
+    # --- 5. Save to Database (Only for non-streaming responses here) ---
+    # Streaming responses are saved via the route handler after consumption.
     if not stream:
         try:
             turn = ConversationTurn(
@@ -146,5 +221,5 @@ def run_assistant_pipeline(user_id: int, user_message: str, session_id: str = No
             logger.error(f"Failed to save conversation turn to DB: {e}", exc_info=True)
             db.session.rollback() # Important to roll back on error
 
-    # Return the final response (string if not streaming, generator if streaming)
+    # Return the final response (string if not streaming, tuple if streaming)
     return assistant_response

@@ -2,12 +2,18 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file located in the same directory (backend/)
 basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, '..', '.env')) # Look for .env in parent directory
+dotenv_path = os.path.join(basedir, '.env')
+load_dotenv(dotenv_path=dotenv_path)
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
+    # It's better practice to require SECRET_KEY from env, not provide a weak default
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        print("WARNING: SECRET_KEY not set in environment variables! Using a default (INSECURE).")
+        SECRET_KEY = 'you-will-never-guess-CHANGE-ME' # Still provide a fallback but warn
+
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(basedir, 'app.db') # Default to SQLite if not set
     SQLALCHEMY_TRACK_MODIFICATIONS = False

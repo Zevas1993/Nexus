@@ -11,9 +11,9 @@ python-dotenv>=1.0
 click>=8.0 # For manage.py CLI
 
 # Database Driver (Choose one based on DATABASE_URL)
-psycopg2-binary # For PostgreSQL
+# psycopg2-binary # For PostgreSQL (Uncomment if using PostgreSQL)
 # mysqlclient # For MySQL
-# Or leave blank if using default SQLite
+# Leave blank if using default SQLite (as configured in .env by default)
 
 # AI & RAG Components
 ollama>=0.1.8   # Official Ollama client
